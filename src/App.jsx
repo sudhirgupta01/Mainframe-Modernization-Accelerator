@@ -49,6 +49,10 @@ export default function App() {
     catch { return ''; }
   });
 
+  // Dynamic AI Scaffolder State
+  const [scaffoldTree, setScaffoldTree] = useState(null);
+  const [isScaffolding, setIsScaffolding] = useState(false);
+
   // AI-Driven Dual-Run Validation & Healing State
   const [validationRun, setValidationRun] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -68,7 +72,8 @@ export default function App() {
     setStatusMessage('Configuration saved.');
   };
 
-  const resetValidationState = () => {
+  const resetGeneratedStates = () => {
+    setScaffoldTree(null);
     setValidationRun(false);
     setAnalysisResult(null);
     setAiSelfHealing(false);
@@ -80,14 +85,14 @@ export default function App() {
     setTargetType(TARGETS[newSource][0].id);
     setSourceCode('');
     setTranspiledCode('');
-    resetValidationState();
+    resetGeneratedStates();
     setStatusMessage(`Switched source to ${SOURCES[newSource].label}.`);
   };
 
   const handleTargetChange = (newTarget) => {
     setTargetType(newTarget);
     setTranspiledCode('');
-    resetValidationState();
+    resetGeneratedStates();
   };
 
   const callGeminiWithFallback = async (promptText) => {
@@ -136,6 +141,34 @@ export default function App() {
     throw lastError || new Error('All Gemini models failed to respond.');
   };
 
+  // LIVE AI SCAFFOLDER: Dynamically inspects the source + generated code to build a tailored repo structure
+  const generateDynamicScaffold = async (srcCode, targetCode, driftInfo = null) => {
+    setIsScaffolding(true);
+    const driftContext = driftInfo?.hasDrift
+      ? `\nNote: Architecture validation flagged ${driftInfo.driftType} (${driftInfo.healAction}). Include the specific migration/remediation config or middleware file needed for that fix in the tree.`
+      : '';
+
+    const scaffoldPrompt = `You are a Principal Cloud Solutions Architect.
+Inspect the legacy ${activeSource.label} code and the generated ${activeTarget.label} code below, and design a tailored, enterprise-grade repository folder and file tree specifically named after the entities, program IDs, segments, or job names found in the code.${driftContext}
+
+Return ONLY a clean ASCII directory tree (using ├──, └──, │) with brief inline comments in parentheses explaining each key file's role. Do NOT include markdown backticks or introductory text.
+
+Legacy Source:
+${srcCode}
+
+Transpiled Code:
+${targetCode}`;
+
+    try {
+      const treeOutput = await callGeminiWithFallback(scaffoldPrompt);
+      setScaffoldTree(treeOutput);
+    } catch {
+      setScaffoldTree(null);
+    } finally {
+      setIsScaffolding(false);
+    }
+  };
+
   const handleTranspile = async () => {
     if (!sourceCode.trim()) {
       setIsError(true);
@@ -151,7 +184,7 @@ export default function App() {
     setIsLoading(true);
     setIsError(false);
     setTranspiledCode('');
-    resetValidationState();
+    resetGeneratedStates();
 
     const prompt = `You are an expert mainframe modernisation architect migrating to ${activeTarget.label}.
 ${activeTarget.rules}
@@ -164,6 +197,8 @@ ${sourceCode}`;
       const cleanCode = await callGeminiWithFallback(prompt);
       setTranspiledCode(cleanCode);
       setStatusMessage(`Transpilation complete. Legacy payload converted to ${activeTarget.label}.`);
+      // Automatically generate the custom repository scaffold based on the actual code
+      generateDynamicScaffold(sourceCode, cleanCode);
     } catch (err) {
       setIsError(true);
       setStatusMessage(`Gemini API Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -179,12 +214,13 @@ ${sourceCode}`;
 
     setIsAnalyzing(true);
     setIsError(false);
-    resetValidationState();
     setValidationRun(true);
+    setAnalysisResult(null);
+    setAiSelfHealing(false);
 
     const diagnosticPrompt = `You are a strict Cloud Architecture Validator.
 Analyze the following legacy ${activeSource.label} code and its transpiled ${activeTarget.label} equivalent.
-Look for real mainframe-to-cloud anti-patterns, data type precision risks (like COBOL COMP-3 being mapped to standard floats), encoding risks (EBCDIC to ASCII data corruption), or static bindings (hardcoded DSN datasets instead of cloud storage).
+Look for real mainframe-to-cloud anti-patterns, data type precision risks (like COBOL COMP-3 being mapped to standard floats), encoding risks (EBCDIC to ASCII data corruption), or static bindings (hardcoded DSN datasets or local SQLite files instead of decoupled cloud storage/databases).
 
 Respond ONLY with a valid JSON object matching this exact structure, with no markdown formatting or extra text:
 {
@@ -207,6 +243,9 @@ ${transpiledCode}`;
       const parsedJson = JSON.parse(rawJsonResponse);
       setAnalysisResult(parsedJson);
       setStatusMessage(`Architecture validation complete.`);
+      if (parsedJson.hasDrift) {
+        generateDynamicScaffold(sourceCode, transpiledCode, parsedJson);
+      }
     } catch (err) {
       setIsError(true);
       setValidationRun(false);
@@ -241,7 +280,9 @@ ${transpiledCode}`;
       setTranspiledCode(finalCode);
       setIsSelfHealedCode(true);
       setAiSelfHealing(true);
-      setStatusMessage(`Self-Healing complete: ${activeTarget.label} code rewritten to resolve ${analysisResult.driftType}.`);
+      setStatusMessage(`Self-Healing complete: ${activeTarget.label} code & Cloud Scaffolder updated to resolve ${analysisResult.driftType}.`);
+      // Refresh the scaffold tree to reflect the patched/self-healed architecture
+      generateDynamicScaffold(sourceCode, finalCode, analysisResult);
     } catch (err) {
       setIsError(true);
       setStatusMessage(`Self-Healing Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -268,7 +309,10 @@ ${transpiledCode}`;
               <span>1. Code Conversion Engine</span>
               {isSelfHealedCode && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Self-Healed Code Ready" />}
             </button>
-            <button onClick={() => setActiveTab('scaffolder')} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold ${activeTab === 'scaffolder' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>📁 2. Cloud Scaffolder</button>
+            <button onClick={() => setActiveTab('scaffolder')} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${activeTab === 'scaffolder' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>
+              <span>📁 2. Cloud Scaffolder</span>
+              {scaffoldTree && <span className="w-2 h-2 rounded-full bg-cyan-400" title="Dynamic Blueprint Ready" />}
+            </button>
             <button onClick={() => setActiveTab('dualrun')} className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${activeTab === 'dualrun' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>
               <span>📈 3. Architecture Validator</span>
               {hasGeneratedCode && !validationRun && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
@@ -329,79 +373,40 @@ ${transpiledCode}`;
 
       {activeTab === 'scaffolder' && (
         <main className="flex-1 p-8 max-w-6xl mx-auto w-full">
-          <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 mb-6">
-            <h2 className="text-white font-bold mb-1 flex items-center gap-2"><span className="text-blue-400">📁</span> Enterprise Cloud Scaffolder</h2>
-            <p className="text-xs text-slate-400">Dynamic repository mapping for {activeTarget.label}.</p>
+          <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 mb-6 flex justify-between items-center">
+            <div>
+              <h2 className="text-white font-bold mb-1 flex items-center gap-2"><span className="text-blue-400">📁</span> Enterprise Cloud Scaffolder</h2>
+              <p className="text-xs text-slate-400">AI-generated repository structure tailored to your {activeSource.label} ➔ {activeTarget.label} payload.</p>
+            </div>
+            {hasGeneratedCode && (
+              <button
+                onClick={() => generateDynamicScaffold(sourceCode, transpiledCode, analysisResult)}
+                disabled={isScaffolding}
+                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-xl text-xs font-semibold"
+              >
+                {isScaffolding ? 'Synthesizing Tree...' : '↻ Regenerate Blueprint'}
+              </button>
+            )}
           </div>
+
           {hasGeneratedCode ? (
-             <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 font-mono text-xs space-y-1.5">
-             {targetType === 'java' && (
-               <>
-                 <div className="text-cyan-400 font-bold">java-microservice-repo/</div>
-                 <div className="pl-4 text-slate-400">├── pom.xml (Spring Boot Dependencies)</div>
-                 <div className="pl-4 text-cyan-400">├── src/main/java/com/bank/migration/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── controller/ModernisedController.java</div>
-                 <div className="pl-8 text-slate-300">├── service/BusinessLogicService.java</div>
-                 <div className="pl-8 text-slate-300">└── repository/ImsDataRepository.java</div>
-               </>
-             )}
-             {targetType === 'python' && (
-               <>
-                 <div className="text-cyan-400 font-bold">python-fastapi-repo/</div>
-                 <div className="pl-4 text-slate-400">├── requirements.txt (FastAPI, Pydantic)</div>
-                 <div className="pl-4 text-cyan-400">├── src/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── main.py (Entrypoint)</div>
-                 <div className="pl-8 text-slate-300">├── routers/api_endpoints.py</div>
-                 <div className="pl-8 text-slate-300">└── models/schemas.py</div>
-               </>
-             )}
-             {targetType === 'node' && (
-               <>
-                 <div className="text-cyan-400 font-bold">node-express-repo/</div>
-                 <div className="pl-4 text-slate-400">├── package.json</div>
-                 <div className="pl-4 text-cyan-400">├── src/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── index.js</div>
-                 <div className="pl-8 text-slate-300">├── routes/api.js</div>
-                 <div className="pl-8 text-slate-300">└── controllers/logicController.js</div>
-               </>
-             )}
-             {targetType === 'postgres' && (
-               <>
-                 <div className="text-cyan-400 font-bold">postgres-migration-repo/</div>
-                 <div className="pl-4 text-slate-400">├── flyway-migrations/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── V1__Create_Flattened_Tables.sql</div>
-                 {isDriftDetected && <div className="pl-8 text-amber-400">├── V2__Add_EBCDIC_Translation_Functions.sql</div>}
-               </>
-             )}
-             {targetType === 'mongodb' && (
-               <>
-                 <div className="text-cyan-400 font-bold">mongodb-schema-repo/</div>
-                 <div className="pl-4 text-slate-400">├── schemas/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── ImsDocumentSchema.json</div>
-                 {isDriftDetected && <div className="pl-8 text-amber-400">├── EBCDIC_Parser_Middleware.js</div>}
-               </>
-             )}
-             {targetType === 'airflow' && (
-               <>
-                 <div className="text-cyan-400 font-bold">airflow-orchestration-repo/</div>
-                 <div className="pl-4 text-slate-400">├── dags/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── converted_mainframe_batch_dag.py</div>
-                 <div className="pl-4 text-slate-400">├── plugins/</div>
-                 <div className="pl-8 text-slate-400">└── s3_file_transfer_hooks.py</div>
-               </>
-             )}
-             {targetType === 'stepfunctions' && (
-               <>
-                 <div className="text-cyan-400 font-bold">aws-step-functions-repo/</div>
-                 <div className="pl-4 text-slate-400">├── statemachine/</div>
-                 <div className="pl-8 text-emerald-400 font-bold">├── batch_workflow.asl.json</div>
-                 <div className="pl-4 text-slate-400">├── lambdas/</div>
-                 <div className="pl-8 text-slate-400">└── file_processor.js</div>
-               </>
-             )}
-           </div>
+            <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 font-mono text-xs leading-relaxed">
+              {isScaffolding ? (
+                <div className="py-12 text-center text-cyan-400 animate-pulse">
+                  Inspecting generated {activeTarget.label} modules and synthesizing repository blueprint via Gemini...
+                </div>
+              ) : scaffoldTree ? (
+                <pre className="text-slate-200 whitespace-pre-wrap overflow-x-auto">{scaffoldTree}</pre>
+              ) : (
+                <div className="py-12 text-center text-slate-400">
+                  Click "Regenerate Blueprint" to synthesize the dynamic folder structure.
+                </div>
+              )}
+            </div>
           ) : (
-             <div className="p-16 text-center text-slate-400 text-xs bg-[#111928] rounded-2xl border border-slate-800">Run translation to view projected repository structure.</div>
+            <div className="p-16 text-center text-slate-400 text-xs bg-[#111928] rounded-2xl border border-slate-800">
+              Run translation first to generate a dynamic cloud repository blueprint.
+            </div>
           )}
         </main>
       )}
