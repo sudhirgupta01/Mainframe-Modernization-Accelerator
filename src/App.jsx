@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const GEMINI_MODELS = [
+const ENGINE_MODELS = [
   'gemini-3.8-flash',
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite'
@@ -69,7 +69,7 @@ export default function App() {
     catch {}
     setShowConfigModal(false);
     setIsError(false);
-    setStatusMessage('Configuration saved.');
+    setStatusMessage('Engine configuration saved.');
   };
 
   const resetGeneratedStates = () => {
@@ -95,9 +95,9 @@ export default function App() {
     resetGeneratedStates();
   };
 
-  const callGeminiWithFallback = async (promptText) => {
+  const callNeuralEngine = async (promptText) => {
     let lastError = null;
-    for (const modelName of GEMINI_MODELS) {
+    for (const modelName of ENGINE_MODELS) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
       try {
@@ -131,14 +131,14 @@ export default function App() {
       } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-          lastError = new Error('Request timed out. Retrying fallback model...');
+          lastError = new Error('Request timed out. Retrying secondary engine node...');
           continue;
         }
         lastError = err;
         break;
       }
     }
-    throw lastError || new Error('All Gemini models failed to respond.');
+    throw lastError || new Error('All Neural Engine nodes failed to respond.');
   };
 
   // LIVE AI SCAFFOLDER: Dynamically inspects the source + generated code to build a tailored repo structure
@@ -160,7 +160,7 @@ Transpiled Code:
 ${targetCode}`;
 
     try {
-      const treeOutput = await callGeminiWithFallback(scaffoldPrompt);
+      const treeOutput = await callNeuralEngine(scaffoldPrompt);
       setScaffoldTree(treeOutput);
     } catch {
       setScaffoldTree(null);
@@ -177,7 +177,7 @@ ${targetCode}`;
     }
     if (!apiKey.trim()) {
       setIsError(true);
-      setStatusMessage('Please open ⚙️ Config and paste your Gemini API Key first.');
+      setStatusMessage('Please open ⚙️ Config and paste your Engine API Key first.');
       return;
     }
 
@@ -194,14 +194,13 @@ Legacy Source Code:
 ${sourceCode}`;
 
     try {
-      const cleanCode = await callGeminiWithFallback(prompt);
+      const cleanCode = await callNeuralEngine(prompt);
       setTranspiledCode(cleanCode);
       setStatusMessage(`Transpilation complete. Legacy payload converted to ${activeTarget.label}.`);
-      // Automatically generate the custom repository scaffold based on the actual code
       generateDynamicScaffold(sourceCode, cleanCode);
     } catch (err) {
       setIsError(true);
-      setStatusMessage(`Gemini API Error: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Engine Processing Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -239,7 +238,7 @@ Transpiled Target:
 ${transpiledCode}`;
 
     try {
-      const rawJsonResponse = await callGeminiWithFallback(diagnosticPrompt);
+      const rawJsonResponse = await callNeuralEngine(diagnosticPrompt);
       const parsedJson = JSON.parse(rawJsonResponse);
       setAnalysisResult(parsedJson);
       setStatusMessage(`Architecture validation complete.`);
@@ -249,7 +248,7 @@ ${transpiledCode}`;
     } catch (err) {
       setIsError(true);
       setValidationRun(false);
-      setStatusMessage(`Validation Error: Ensure Gemini returns valid JSON. ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Validation Error: Unable to parse diagnostic report. ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -273,7 +272,7 @@ Code to remediate:
 ${transpiledCode}`;
 
     try {
-      const rewrittenCode = await callGeminiWithFallback(remediationPrompt);
+      const rewrittenCode = await callNeuralEngine(remediationPrompt);
       const healBanner = `/* [AI SELF-HEALED | Fix: ${analysisResult.healAction}] */`;
       const finalCode = rewrittenCode.startsWith('/* [AI') ? rewrittenCode : `${healBanner}\n${rewrittenCode}`;
       
@@ -281,7 +280,6 @@ ${transpiledCode}`;
       setIsSelfHealedCode(true);
       setAiSelfHealing(true);
       setStatusMessage(`Self-Healing complete: ${activeTarget.label} code & Cloud Scaffolder updated to resolve ${analysisResult.driftType}.`);
-      // Refresh the scaffold tree to reflect the patched/self-healed architecture
       generateDynamicScaffold(sourceCode, finalCode, analysisResult);
     } catch (err) {
       setIsError(true);
@@ -333,7 +331,7 @@ ${transpiledCode}`;
         <main className="flex-1 flex flex-col p-6 gap-4 w-full mx-auto">
           <div className="flex justify-between bg-[#111928] p-3 rounded-xl border border-slate-800 items-center">
             <button onClick={handleTranspile} disabled={isLoading} className="bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 px-6 py-2 rounded-lg text-xs font-bold shadow-md">
-              {isLoading ? 'Processing via Gemini...' : '▷ Run Cloud Translation'}
+              {isLoading ? 'Synthesising via Neural Engine...' : '▷ Run Cloud Translation'}
             </button>
             <div className="text-xs text-slate-400">Select Source and Target Below</div>
           </div>
@@ -376,7 +374,7 @@ ${transpiledCode}`;
           <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 mb-6 flex justify-between items-center">
             <div>
               <h2 className="text-white font-bold mb-1 flex items-center gap-2"><span className="text-blue-400">📁</span> Enterprise Cloud Scaffolder</h2>
-              <p className="text-xs text-slate-400">AI-generated repository structure tailored to your {activeSource.label} ➔ {activeTarget.label} payload.</p>
+              <p className="text-xs text-slate-400">Neural-synthesised repository structure tailored to your {activeSource.label} ➔ {activeTarget.label} payload.</p>
             </div>
             {hasGeneratedCode && (
               <button
@@ -384,7 +382,7 @@ ${transpiledCode}`;
                 disabled={isScaffolding}
                 className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 border border-cyan-500/30 px-4 py-2 rounded-xl text-xs font-semibold"
               >
-                {isScaffolding ? 'Synthesizing Tree...' : '↻ Regenerate Blueprint'}
+                {isScaffolding ? 'Synthesising Tree...' : '↻ Regenerate Blueprint'}
               </button>
             )}
           </div>
@@ -393,13 +391,13 @@ ${transpiledCode}`;
             <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 font-mono text-xs leading-relaxed">
               {isScaffolding ? (
                 <div className="py-12 text-center text-cyan-400 animate-pulse">
-                  Inspecting generated {activeTarget.label} modules and synthesizing repository blueprint via Gemini...
+                  Inspecting generated {activeTarget.label} modules and synthesising repository blueprint via Neural Architecture Engine...
                 </div>
               ) : scaffoldTree ? (
                 <pre className="text-slate-200 whitespace-pre-wrap overflow-x-auto">{scaffoldTree}</pre>
               ) : (
                 <div className="py-12 text-center text-slate-400">
-                  Click "Regenerate Blueprint" to synthesize the dynamic folder structure.
+                  Click "Regenerate Blueprint" to synthesise the dynamic folder structure.
                 </div>
               )}
             </div>
@@ -474,7 +472,7 @@ ${transpiledCode}`;
             ) : (
                <div className="py-16 text-center text-xs text-slate-400">
                 {isAnalyzing ? (
-                  <span className="text-cyan-400 animate-pulse">Scanning architecture via Gemini AI...</span>
+                  <span className="text-cyan-400 animate-pulse">Scanning architecture via Neural Validation Engine...</span>
                 ) : hasGeneratedCode ? (
                   <button onClick={handleAnalyzeArchitecture} disabled={isAnalyzing} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl">Run Live Architecture Profiler</button>
                 ) : (
@@ -499,16 +497,16 @@ ${transpiledCode}`;
                     <div className="space-y-1 text-slate-300">
                       <p className="text-cyan-400">[info] Analyzing cloud-native target architecture...</p>
                       <p className="text-rose-400">[warn] {analysisResult.terminalDriftLog}</p>
-                      <p className="text-slate-400">[info] Click '⚡ Self-Heal Code' to request an AI rewrite and resolve the anti-pattern.</p>
+                      <p className="text-slate-400">[info] Click '⚡ Self-Heal Code' to request an automated rewrite and resolve the anti-pattern.</p>
                     </div>
                   )
                 ) : (
                   <div className="space-y-1 text-slate-300">
-                    <p className="text-cyan-400">[info] Analyzing target architecture via Gemini...</p>
+                    <p className="text-cyan-400">[info] Analyzing target architecture via Neural Validation Engine...</p>
                     <p className="text-emerald-400">[success] Zero divergence detected. Code verified for cloud deployment.</p>
                   </div>
                 )
-              ) : <p>{isAnalyzing ? "Fetching AI diagnostic report..." : "Waiting for agent activation..."}</p>}
+              ) : <p>{isAnalyzing ? "Generating diagnostic report via Neural Validation Engine..." : "Waiting for agent activation..."}</p>}
             </div>
           </div>
         </main>
@@ -517,8 +515,8 @@ ${transpiledCode}`;
       {showConfigModal && (
         <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50">
           <div className="bg-[#111928] p-6 rounded-2xl border border-slate-800 max-w-md w-full flex flex-col gap-4 text-xs">
-            <h3 className="font-bold text-white">Backend Configuration</h3>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Gemini API Key" className="bg-slate-950 p-2 text-white border border-slate-700 rounded outline-none" />
+            <h3 className="font-bold text-white">Modernisation Engine Configuration</h3>
+            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Engine API Key" className="bg-slate-950 p-2 text-white border border-slate-700 rounded outline-none" />
             <button onClick={handleSaveConfig} className="bg-indigo-600 text-white p-2 rounded font-semibold">Save</button>
           </div>
         </div>
