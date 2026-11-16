@@ -296,7 +296,7 @@ ${transpiledCode}`;
                 <span className="text-xs font-semibold text-slate-400">INPUT</span>
                 <select value={sourceType} onChange={(e) => handleSourceChange(e.target.value)} className="bg-slate-900 text-slate-200 text-xs font-bold px-3 py-1.5 rounded border border-slate-700 outline-none w-2/3">
                   {Object.values(SOURCES).map(src => (
-                    <option key={src.id} value={src.id}>{src.label}</option>
+                    <option key={src.id} value={src.id} className="bg-slate-900 text-white">{src.label}</option>
                   ))}
                 </select>
               </div>
@@ -308,9 +308,9 @@ ${transpiledCode}`;
               <div className="bg-[#0c1220] p-3 border-b border-slate-800 flex justify-between items-center">
                 <span className="text-xs font-semibold text-indigo-400">TARGET</span>
                 <div className="flex items-center gap-2 w-2/3">
-                  <select value={targetType} onChange={(e) => handleTargetChange(e.target.value)} className="bg-indigo-950/30 text-indigo-300 text-xs font-bold px-3 py-1.5 rounded border border-indigo-900/50 outline-none w-full">
+                  <select value={targetType} onChange={(e) => handleTargetChange(e.target.value)} className="bg-slate-900 text-indigo-300 text-xs font-bold px-3 py-1.5 rounded border border-indigo-900/50 outline-none w-full">
                     {TARGETS[sourceType].map(tgt => (
-                      <option key={tgt.id} value={tgt.id}>{tgt.label}</option>
+                      <option key={tgt.id} value={tgt.id} className="bg-slate-900 text-white">{tgt.label}</option>
                     ))}
                   </select>
                 </div>
